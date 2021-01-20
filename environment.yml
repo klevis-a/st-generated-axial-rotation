@@ -1,0 +1,10 @@
+name: st-generated-axial-rot
+channels:
+    - conda-forge
+dependencies:
+- python>=3.7
+- numba~=0.51.2
+- quaternion~=2020.9.5.14.42.2
+- pip
+- pip:
+    - -r file:requirements.txt

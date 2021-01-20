@@ -1,0 +1,10 @@
+numpy~=1.18.5
+matplotlib~=3.2.2
+mplcursors~=0.3
+pandas~=1.0.5
+spm1d~=0.4.0
+biokinepy~=0.1.1
+lazy~=1.4
+scipy~=1.5.4
+Pillow~=8.0.1
+kaleido~=0.1.0
