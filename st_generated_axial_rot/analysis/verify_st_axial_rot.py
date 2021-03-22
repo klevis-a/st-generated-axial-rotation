@@ -4,10 +4,16 @@ projecting the scapula angular velocity onto the longitudinal axis of the humeru
 The path to a config directory (containing parameters.json) must be passed in as an argument. Within parameters.json the
 following keys must be present:
 
+trial_name: The trial to plot.
 logger_name: Name of the loggger set up in logging.ini that will receive log messages from this script.
 biplane_vicon_db_dir: Path to the directory containing the biplane and vicon CSV files.
-excluded_trials: Trial names to exclude from analysis.
-trial_name: Trial name to use for verification.
+torso_def: Anatomical definition of the torso: v3d for Visual3D definition, isb for ISB definition.
+scap_lateral: Landmarks to utilize when defining the scapula's lateral (+Z) axis.
+dtheta_fine: Incremental angle (deg) to use for fine interpolation between minimum and maximum HT elevation analyzed.
+dtheta_coarse: Incremental angle (deg) to use for coarse interpolation between minimum and maximum HT elevation analyzed.
+min_elev: Minimum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+max_elev: Maximum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+backend: Matplotlib backend to use for plotting (e.g. Qt5Agg, macosx, etc.).
 """
 
 if __name__ == '__main__':
@@ -41,7 +47,7 @@ if __name__ == '__main__':
     fileConfig(config_dir / 'logging.ini', disable_existing_loggers=False)
     log = logging.getLogger(params.logger_name)
 
-    prepare_db(db, params.torso_def, False, params.dtheta_fine, params.dtheta_coarse,
+    prepare_db(db, params.torso_def, params.scap_lateral, params.dtheta_fine, params.dtheta_coarse,
                [params.min_elev, params.max_elev], should_fill=False, should_clean=False)
     trial = db.loc[params.trial_name]
 

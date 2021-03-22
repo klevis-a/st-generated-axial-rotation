@@ -5,93 +5,18 @@ following keys must be present:
 
 logger_name: Name of the loggger set up in logging.ini that will receive log messages from this script.
 biplane_vicon_db_dir: Path to the directory containing the biplane and vicon CSV files.
-excluded_trials: Trial names to exclude from analysis.
-use_ac: Whether to use the AC or GC landmark when building the scapula CS.
+torso_def: Anatomical definition of the torso: v3d for Visual3D definition, isb for ISB definition.
+scap_lateral: Landmarks to utilize when defining the scapula's lateral (+Z) axis.
+dtheta_fine: Incremental angle (deg) to use for fine interpolation between minimum and maximum HT elevation analyzed.
+dtheta_coarse: Incremental angle (deg) to use for coarse interpolation between minimum and maximum HT elevation analyzed.
+min_elev: Minimum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+max_elev: Maximum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+era90_endpts: Path to csv file containing start and stop frames (including both external and internal rotation) for
+external rotation in 90 deg of abduction trials.
+erar_endpts: Path to csv file containing start and stop frames (including both external and internal rotation) for
+external rotation in adduction trials.
+backend: Matplotlib backend to use for plotting (e.g. Qt5Agg, macosx, etc.).
 """
-import numpy as np
-import quaternion as q
-from scipy.integrate import cumtrapz
-from biokinepy.vec_ops import extended_dot
-from st_generated_axial_rot.common.analysis_utils import quat_project
-
-
-def st_induced_axial_rot_ang_vel(st, ht):
-    num_frames = st.rot_matrix.shape[0]
-    # The ST velocity is expressed in the torso coordinate system so we can't just use its x,y,z components.
-    # We need to first project it onto the x,y,z axes of the scapula. This is equivalent to expressing the ST velocity
-    # in its own body coordinates.
-    st_angvel_x = (extended_dot(st.ang_vel, st.rot_matrix[:, :, 0])[..., np.newaxis] * st.rot_matrix[:, :, 0])
-    st_angvel_y = (extended_dot(st.ang_vel, st.rot_matrix[:, :, 1])[..., np.newaxis] * st.rot_matrix[:, :, 1])
-    st_angvel_z = (extended_dot(st.ang_vel, st.rot_matrix[:, :, 2])[..., np.newaxis] * st.rot_matrix[:, :, 2])
-
-    st_angvel_proj_x = extended_dot(st_angvel_x, ht.rot_matrix[:, :, 1])
-    st_angvel_proj_y = extended_dot(st_angvel_y, ht.rot_matrix[:, :, 1])
-    st_angvel_proj_z = extended_dot(st_angvel_z, ht.rot_matrix[:, :, 1])
-    st_angvel_proj = extended_dot(st.ang_vel, ht.rot_matrix[:, :, 1])
-
-    induced_axial_rot = np.empty((num_frames, 4), dtype=np.float)
-    induced_axial_rot[:, 0] = cumtrapz(st_angvel_proj_x, dx=st.dt, initial=0)
-    induced_axial_rot[:, 1] = cumtrapz(st_angvel_proj_y, dx=st.dt, initial=0)
-    induced_axial_rot[:, 2] = cumtrapz(st_angvel_proj_z, dx=st.dt, initial=0)
-    induced_axial_rot[:, 3] = cumtrapz(st_angvel_proj, dx=st.dt, initial=0)
-
-    return induced_axial_rot
-
-
-def st_induced_axial_rot_fha(st, ht):
-    num_frames = st.rot_matrix.shape[0]
-    st_diff = st.quat[1:] * np.conjugate(st.quat[:-1])
-    st_fha = q.as_rotation_vector(st_diff)
-    st_fha_x = (extended_dot(st_fha, st.rot_matrix[:-1, :, 0])[..., np.newaxis] * st.rot_matrix[:-1, :, 0])
-    st_fha_y = (extended_dot(st_fha, st.rot_matrix[:-1, :, 1])[..., np.newaxis] * st.rot_matrix[:-1, :, 1])
-    st_fha_z = (extended_dot(st_fha, st.rot_matrix[:-1, :, 2])[..., np.newaxis] * st.rot_matrix[:-1, :, 2])
-
-    st_fha_proj_x = extended_dot(st_fha_x, ht.rot_matrix[:-1, :, 1])
-    st_fha_proj_y = extended_dot(st_fha_y, ht.rot_matrix[:-1, :, 1])
-    st_fha_proj_z = extended_dot(st_fha_z, ht.rot_matrix[:-1, :, 1])
-    st_fha_proj = extended_dot(st_fha, ht.rot_matrix[:-1, :, 1])
-
-    induced_axial_rot = np.empty((num_frames, 4), dtype=np.float)
-    induced_axial_rot[0, :] = 0
-    induced_axial_rot[1:, 0] = np.add.accumulate(st_fha_proj_x)
-    induced_axial_rot[1:, 1] = np.add.accumulate(st_fha_proj_y)
-    induced_axial_rot[1:, 2] = np.add.accumulate(st_fha_proj_z)
-    induced_axial_rot[1:, 3] = np.add.accumulate(st_fha_proj)
-
-    return induced_axial_rot
-
-
-def st_induced_axial_rot_swing_twist(st, ht):
-    num_frames = st.rot_matrix.shape[0]
-    # rotational difference between frames expressed in torso coordinate system
-    st_diff = st.quat[1:] * np.conjugate(st.quat[:-1])
-
-    induced_axial_rot_delta = np.empty((num_frames, 4), dtype=np.float)
-    induced_axial_rot_delta[0, :] = 0
-    for i in range(num_frames-1):
-        hum_axis = ht.rot_matrix[i, :, 1]
-
-        # this computes the induced axial rotation from the ST rotation in its entirety
-        rot_vec = q.as_rotation_vector(quat_project(st_diff[i], hum_axis))
-        rot_vec_theta = np.linalg.norm(rot_vec)
-        rot_vec_axis = rot_vec / rot_vec_theta
-        # Note that rot_vec_theta will always be + because of np.linalg.norm. But a rotation about an axis v by an angle
-        # theta is the same as a rotation about -v by an angle -theta. So here the humeral axis sets our direction. That
-        # is, we always rotate around hum_axis (and not -hum_axis) and adjust the sign of rot_vec_theta accordingly
-        induced_axial_rot_delta[i+1, 3] = rot_vec_theta * (1 if np.dot(rot_vec_axis, hum_axis) > 0 else -1)
-
-        # this computes it for each individual axis of the scapula
-        for j in range(3):
-            # first project the scapula rotation onto one of its axis
-            st_axis_proj = quat_project(st_diff[i], st.rot_matrix[i, :, j])
-            # then proceed as above
-            rot_vec = q.as_rotation_vector(quat_project(st_axis_proj, hum_axis))
-            rot_vec_theta = np.linalg.norm(rot_vec)
-            rot_vec_axis = rot_vec / rot_vec_theta
-            induced_axial_rot_delta[i+1, j] = rot_vec_theta * (1 if np.dot(rot_vec_axis, hum_axis) > 0 else -1)
-
-    return np.add.accumulate(induced_axial_rot_delta)
-
 
 if __name__ == '__main__':
     if __package__ is None:
@@ -100,11 +25,14 @@ if __name__ == '__main__':
     import os
     import distutils.util
     from pathlib import Path
+    import numpy as np
     from st_generated_axial_rot.common.database import create_db, BiplaneViconSubject, pre_fetch
     from st_generated_axial_rot.common.analysis_utils import prepare_db
     from st_generated_axial_rot.common.analysis_er_utils import ready_er_db
     from st_generated_axial_rot.common.json_utils import get_params
     from st_generated_axial_rot.common.arg_parser import mod_arg_parser
+    from st_generated_axial_rot.common.analysis_utils import (st_induced_axial_rot_ang_vel, st_induced_axial_rot_fha,
+                                                              st_induced_axial_rot_swing_twist)
     import logging
     from logging.config import fileConfig
 
@@ -122,7 +50,6 @@ if __name__ == '__main__':
 
     # relevant parameters
     output_path = Path(params.output_dir)
-    use_ac = bool(distutils.util.strtobool(params.use_ac))
 
     # logging
     fileConfig(config_dir / 'logging.ini', disable_existing_loggers=False)
@@ -131,9 +58,9 @@ if __name__ == '__main__':
     # prepare db
     db_elev = db.loc[db['Trial_Name'].str.contains('_CA_|_SA_|_FE_')].copy()
     db_rot = db.loc[db['Trial_Name'].str.contains('_ERa90_|_ERaR_')].copy()
-    prepare_db(db_elev, params.torso_def, use_ac, params.dtheta_fine, params.dtheta_coarse,
+    prepare_db(db_elev, params.torso_def, params.scap_lateral, params.dtheta_fine, params.dtheta_coarse,
                [params.min_elev, params.max_elev])
-    db_rot = ready_er_db(db_rot, params.torso_def, use_ac, params.erar_endpts, params.era90_endpts,
+    db_rot = ready_er_db(db_rot, params.torso_def, params.scap_lateral, params.erar_endpts, params.era90_endpts,
                          params.dtheta_fine)
 
     # compute st-induced axial rotation with each of the three different methods

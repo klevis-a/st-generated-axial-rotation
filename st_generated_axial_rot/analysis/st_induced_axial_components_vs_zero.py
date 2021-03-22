@@ -5,8 +5,13 @@ following keys must be present:
 
 logger_name: Name of the loggger set up in logging.ini that will receive log messages from this script.
 biplane_vicon_db_dir: Path to the directory containing the biplane and vicon CSV files.
-excluded_trials: Trial names to exclude from analysis.
-use_ac: Whether to use the AC or GC landmark when building the scapula CS.
+torso_def: Anatomical definition of the torso: v3d for Visual3D definition, isb for ISB definition.
+scap_lateral: Landmarks to utilize when defining the scapula's lateral (+Z) axis.
+dtheta_fine: Incremental angle (deg) to use for fine interpolation between minimum and maximum HT elevation analyzed.
+dtheta_coarse: Incremental angle (deg) to use for coarse interpolation between minimum and maximum HT elevation analyzed.
+min_elev: Minimum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+max_elev: Maximum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+backend: Matplotlib backend to use for plotting (e.g. Qt5Agg, macosx, etc.).
 """
 
 if __name__ == '__main__':
@@ -23,7 +28,8 @@ if __name__ == '__main__':
     from st_generated_axial_rot.common.plot_utils import (init_graphing, make_interactive, mean_sd_plot, spm_plot_alpha,
                                                           extract_sig, style_axes, HandlerTupleVertical)
     from st_generated_axial_rot.common.database import create_db, BiplaneViconSubject, pre_fetch
-    from st_generated_axial_rot.common.analysis_utils import prepare_db, extract_sub_rot_norm, st_induced_axial_rot_fha
+    from st_generated_axial_rot.common.analysis_utils import (prepare_db, extract_sub_rot_norm,
+                                                              st_induced_axial_rot_fha, add_st_induced)
     from st_generated_axial_rot.common.json_utils import get_params
     from st_generated_axial_rot.common.arg_parser import mod_arg_parser
     import logging
@@ -44,17 +50,16 @@ if __name__ == '__main__':
 
     # relevant parameters
     output_path = Path(params.output_dir)
-    use_ac = bool(distutils.util.strtobool(params.use_ac))
 
     # logging
     fileConfig(config_dir / 'logging.ini', disable_existing_loggers=False)
     log = logging.getLogger(params.logger_name)
 
     db_elev = db.loc[db['Trial_Name'].str.contains('_CA_|_SA_|_FE_')].copy()
-    prepare_db(db_elev, params.torso_def, use_ac, params.dtheta_fine, params.dtheta_coarse,
+    prepare_db(db_elev, params.torso_def, params.scap_lateral, params.dtheta_fine, params.dtheta_coarse,
                [params.min_elev, params.max_elev])
-    db_elev_equal = db_elev.loc[~db_elev['Trial_Name'].str.contains('N020')].copy()
-    db_elev['traj_interp'].apply(st_induced_axial_rot_fha)
+    db_elev_equal = db_elev.loc[~db_elev['Trial_Name'].str.contains('U35_010')].copy()
+    db_elev['traj_interp'].apply(add_st_induced, args=[st_induced_axial_rot_fha])
 
     #%%
     if bool(distutils.util.strtobool(params.parametric)):
@@ -65,13 +70,10 @@ if __name__ == '__main__':
         infer_params = {'force_iterations': True}
 
     def subj_name_to_number(subject_name):
-        if subject_name[-1] == 'A':
-            return int(subject_name[-2])
-        else:
-            if subject_name[-2] == '1' or subject_name[-2] == '2':
-                return int(subject_name[-2:])
-            else:
-                return int(subject_name[-1])
+        subj_num = int(subject_name.split('_')[1])
+        if subject_name[0] == 'O':
+            subj_num += 10
+        return subj_num
 
     alpha = 0.05
     color_map = plt.get_cmap('Dark2')
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     init_graphing(params.backend)
     plt.close('all')
 
-    fig_plane = plt.figure(figsize=(190 / 25.4, 230 / 25.4), dpi=params.dpi)
+    fig_plane = plt.figure(figsize=(190 / 25.4, 230 / 25.4))
     axs_plane = fig_plane.subplots(4, 2)
 
     # style axes, add x and y labels
@@ -295,7 +297,4 @@ if __name__ == '__main__':
     style_axes(ax_norm_anova, 'Humerothoracic Elevation (Deg)', 'p-value')
     plt.tight_layout()
     fig_norm_anova.suptitle('ANOVA Normality tests')
-    if params.fig_file:
-        fig_plane.savefig(params.fig_file)
-    else:
-        plt.show()
+    plt.show()

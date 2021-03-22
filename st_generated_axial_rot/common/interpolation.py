@@ -114,28 +114,28 @@ class JointTrajInterp:
     common_coarse_down: biokinepy.trajectory.PoseTrajectory
         Coarsely interpolated arm lowering trajectory encompassing a HT elevation that is present for all trials during
         arm lowering.
-    axial_rot: np.ndarray
+    true_axial_rot: np.ndarray
         True axial rotation for this trajectory.
-    axial_rot_up: np.ndarray
+    true_axial_rot_up: np.ndarray
         True axial rotation for the arm raising portion of this trajectory.
-    axial_rot_down: np.ndarray
+    true_axial_rot_down: np.ndarray
         True axial rotation for the arm lowering portion of this trajectory.
-    axial_rot_sym_fine_up: np.ndarray
+    true_axial_rot_sym_fine_up: np.ndarray
         Finely interpolated true axial rotation during arm raising encompassing a HT elevation region that is present
         for both the arm raising and lowering phases of this trajectory.
-    axial_rot_sym_fine_down: np.ndarray
+    true_axial_rot_sym_fine_down: np.ndarray
         Finely interpolated true axial rotation during arm lowering encompassing a HT elevation region that is present
         for both the arm raising and lowering phases of this trajectory.
-    axial_rot_common_fine_up: np.ndarray
+    true_axial_rot_common_fine_up: np.ndarray
         Finely interpolated true axial rotation during arm raising encompassing a HT elevation that is present for all
         trials during arm raising.
-    axial_rot_common_fine_down: np.ndarray
+    true_axial_rot_common_fine_down: np.ndarray
         Finely interpolated true axial rotation during arm lowering encompassing a HT elevation that is present for all
         trials during arm lowering.
-    axial_rot_common_coarse_up: np.ndarray
+    true_axial_rot_common_coarse_up: np.ndarray
         Coarsely interpolated true axial rotation during arm raising encompassing a HT elevation that is present for all
         trials during arm raising.
-    axial_rot_common_coarse_down: np.ndarray
+    true_axial_rot_common_coarse_down: np.ndarray
         Coarsely interpolated true axial rotation during arm lowering encompassing a HT elevation that is present for
         all trials during arm lowering.
     """
@@ -169,21 +169,21 @@ class JointTrajInterp:
 
         # compute axial rotation interpolation - this must be done separately than the computations above because
         # axial rotation is path dependent
-        self.axial_rot = traj.true_axial_rot
-        self.axial_rot_up = shoulder_traj.get_up(self.axial_rot)
-        self.axial_rot_down = shoulder_traj.get_down(self.axial_rot)
-        self.axial_rot_sym_fine_up = interp_scalar_traj(shoulder_traj.ht_ea_up, self.axial_rot_up,
-                                                        shoulder_traj.sym_ht_range_fine)
-        self.axial_rot_sym_fine_down = interp_scalar_traj(shoulder_traj.ht_ea_down, self.axial_rot_down,
-                                                          shoulder_traj.sym_ht_range_fine)
-        self.axial_rot_common_fine_up = interp_scalar_traj(shoulder_traj.ht_ea_up, self.axial_rot_up,
-                                                           shoulder_traj.common_ht_range_fine)
-        self.axial_rot_common_fine_down = interp_scalar_traj(shoulder_traj.ht_ea_down, self.axial_rot_down,
-                                                             shoulder_traj.common_ht_range_fine)
-        self.axial_rot_common_coarse_up = interp_scalar_traj(shoulder_traj.ht_ea_up, self.axial_rot_up,
-                                                             shoulder_traj.common_ht_range_coarse)
-        self.axial_rot_common_coarse_down = interp_scalar_traj(shoulder_traj.ht_ea_down, self.axial_rot_down,
-                                                               shoulder_traj.common_ht_range_coarse)
+        self.true_axial_rot = traj.true_axial_rot
+        self.true_axial_rot_up = shoulder_traj.get_up(self.true_axial_rot)
+        self.true_axial_rot_down = shoulder_traj.get_down(self.true_axial_rot)
+        self.true_axial_rot_sym_fine_up = interp_scalar_traj(shoulder_traj.ht_ea_up, self.true_axial_rot_up,
+                                                             shoulder_traj.sym_ht_range_fine)
+        self.true_axial_rot_sym_fine_down = interp_scalar_traj(shoulder_traj.ht_ea_down, self.true_axial_rot_down,
+                                                               shoulder_traj.sym_ht_range_fine)
+        self.true_axial_rot_common_fine_up = interp_scalar_traj(shoulder_traj.ht_ea_up, self.true_axial_rot_up,
+                                                                shoulder_traj.common_ht_range_fine)
+        self.true_axial_rot_common_fine_down = interp_scalar_traj(shoulder_traj.ht_ea_down, self.true_axial_rot_down,
+                                                                  shoulder_traj.common_ht_range_fine)
+        self.true_axial_rot_common_coarse_up = interp_scalar_traj(shoulder_traj.ht_ea_up, self.true_axial_rot_up,
+                                                                  shoulder_traj.common_ht_range_coarse)
+        self.true_axial_rot_common_coarse_down = interp_scalar_traj(shoulder_traj.ht_ea_down, self.true_axial_rot_down,
+                                                                    shoulder_traj.common_ht_range_coarse)
 
 
 def interp_scalar_traj(x_orig: np.ndarray, scalar_orig: np.ndarray, x: np.ndarray) -> np.ndarray:

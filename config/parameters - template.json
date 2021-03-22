@@ -1,0 +1,20 @@
+{
+  "logger_name": "st_generated_axial_rot",
+  "biplane_vicon_db_dir": "C:\\Users\\user\\Desktop\\zenodo_download\\database",
+  "era90_endpts": "data\\ERa90_Endpoints.csv",
+  "erar_endpts": "data\\ERaR_Endpoints.csv",
+  "backend": "TkAgg",
+  "trial_name": "O45_006_FE_t01",
+  "weighted": "False",
+  "output_dir": "C:\\Users\\user\\Desktop\\output",
+  "excluded_trials": ["O45_003_CA_t01", "O45_003_SA_t02", "O45_003_FE_t02", "U35_010_FE_t01"],
+  "torso_def": "isb",
+  "scap_lateral": "GC",
+  "min_elev": 25,
+  "max_elev": 130,
+  "dtheta_fine": 0.25,
+  "dtheta_coarse": 5,
+  "parametric": "True",
+  "dpi": 100,
+  "fig_file": ""
+}

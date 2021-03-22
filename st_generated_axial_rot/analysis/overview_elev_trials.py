@@ -6,20 +6,31 @@ following keys must be present:
 
 logger_name: Name of the loggger set up in logging.ini that will receive log messages from this script.
 biplane_vicon_db_dir: Path to the directory containing the biplane and vicon CSV files.
-excluded_trials: Trial names to exclude from analysis.
+torso_def: Anatomical definition of the torso: v3d for Visual3D definition, isb for ISB definition.
+scap_lateral: Landmarks to utilize when defining the scapula's lateral (+Z) axis.
+dtheta_fine: Incremental angle (deg) to use for fine interpolation between minimum and maximum HT elevation analyzed.
+dtheta_coarse: Incremental angle (deg) to use for coarse interpolation between minimum and maximum HT elevation analyzed.
+min_elev: Minimum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+max_elev: Maximum HT elevation angle (deg) utilized for analysis that encompasses all trials.
+backend: Matplotlib backend to use for plotting (e.g. Qt5Agg, macosx, etc.).
 output_dir: Directory where PDF records should be output.
-use_ac: Whether to use the AC or GC landmark when building the scapula CS.
 """
 
 from typing import NamedTuple, Union
+from functools import partial
 import numpy as np
 import quaternion as q
 import matplotlib.pyplot as plt
+import matplotlib.ticker as plticker
+from matplotlib.backends.backend_pdf import PdfPages
 from biokinepy.trajectory import PoseTrajectory
 from biokinepy.mean_smoother import quat_mean
 from st_generated_axial_rot.common.python_utils import rgetattr
 from st_generated_axial_rot.common.plot_utils import style_axes
 from st_generated_axial_rot.common.analysis_utils import extract_sub_rot
+import logging
+
+log = logging.getLogger(__name__)
 
 
 def traj_stats(all_traj):
@@ -44,15 +55,17 @@ def extract_sub_rot_diff(shoulder_traj, traj_def, y_def, decomp_method, sub_rot)
     # Then extract the decomp_method. Note that each JointTrajectory actually computes separate scalar interpolation for
     # true_axial_rot (that's why I don't access the PoseTrajectory below) because true_axial_rot is path dependent so
     # it doesn't make sense to compute it on a trajectory that starts at 25 degrees (for example)
-    if decomp_method == 'true_axial_rot':
-        y_up = getattr(joint_traj, 'axial_rot_' + y_def + '_up')
-        y_down = getattr(joint_traj, 'axial_rot_' + y_def + '_down')
-    elif decomp_method == 'induced_axial_rot':
-        y_up = getattr(joint_traj, 'induced_axial_rot_' + y_def + '_up')[:, sub_rot]
-        y_down = getattr(joint_traj, 'induced_axial_rot_' + y_def + '_down')[:, sub_rot]
-    else:
+    if 'euler' in decomp_method:
         y_up = rgetattr(getattr(joint_traj, y_def + '_up'), decomp_method)[:, sub_rot]
         y_down = rgetattr(getattr(joint_traj, y_def + '_down'), decomp_method)[:, sub_rot]
+    else:
+        if sub_rot is None:
+            y_up = getattr(joint_traj, decomp_method + '_' + y_def + '_up')
+            y_down = getattr(joint_traj, decomp_method + '_' + y_def + '_down')
+        else:
+            y_up = getattr(joint_traj, decomp_method + '_' + y_def + '_up')[:, sub_rot]
+            y_down = getattr(joint_traj, decomp_method + '_' + y_def + '_down')[:, sub_rot]
+
     return y_up - y_down
 
 
@@ -63,15 +76,15 @@ def extract_interp_quat_traj(shoulder_traj, traj_def, y_def):
 
 def ind_plotter(shoulder_traj, traj_def, x_def, y_def, decomp_method, sub_rot, ax):
     y = extract_sub_rot(shoulder_traj, traj_def, y_def, decomp_method, sub_rot)
-    return ax.plot(getattr(shoulder_traj, x_def), np.rad2deg(y), label=shoulder_traj.trial_name.split('_')[0],
-                   alpha=0.6)
+    return ax.plot(getattr(shoulder_traj, x_def), np.rad2deg(y),
+                   label='_'.join(shoulder_traj.trial_name.split('_')[0:2]), alpha=0.6)
 
 
 def ind_diff_plotter(shoulder_traj, traj_def, x_def, y_def, decomp_method, sub_rot, ax):
     y_up = extract_sub_rot(shoulder_traj, traj_def, y_def + '_up', decomp_method, sub_rot)
     y_down = extract_sub_rot(shoulder_traj, traj_def, y_def + '_down', decomp_method, sub_rot)
-    return ax.plot(getattr(shoulder_traj, x_def), np.rad2deg(y_up-y_down), label=shoulder_traj.trial_name.split('_')[0],
-                   alpha=0.6)
+    return ax.plot(getattr(shoulder_traj, x_def), np.rad2deg(y_up-y_down),
+                   label='_'.join(shoulder_traj.trial_name.split('_')[0:2]), alpha=0.6)
 
 
 def ind_plotter_color_spec(shoulder_traj, traj_def, x_def, y_def, decomp_method, sub_rot, ax, c):
@@ -97,7 +110,7 @@ def summary_plotter(shoulder_trajs, traj_def, x_ind_def, y_ind_def, x_cmn_def, y
     # Then the averaged trajectory is decomposed according to decomp_method and sub_rot. One could then use this to
     # compute SD and SE, but I don't go that far since almost always the quaternion mean and the mean as computed above
     # match very well. But I do overlay the quaternion mean as a sanity check
-    if decomp_method != 'true_axial_rot' and decomp_method != 'induced_axial_rot':
+    if 'euler' in decomp_method:
         mean_traj_quat = quat_mean_trajs(np.stack(shoulder_trajs.apply(extract_interp_quat_traj,
                                                                        args=[traj_def, y_cmn_def]), axis=0))
         mean_traj_pos = np.zeros((mean_traj_quat.size, mean_traj_quat.size))
@@ -125,7 +138,7 @@ def summary_diff_plotter(shoulder_trajs, traj_def, x_ind_def, y_ind_def, x_cmn_d
     return ind_traj_plot_lines, agg_lines
 
 
-def grp_plotter(col_name, pdf_file_path, grp_c, plot_directives):
+def grp_plotter(activity_df, col_name, pdf_file_path, grp_c, plot_directives, section):
     with PdfPages(pdf_file_path) as grp_pdf:
         for name, plot_dir in plot_directives.items():
             fig = plt.figure()
@@ -220,16 +233,12 @@ if __name__ == '__main__':
 
     import os
     import distutils.util
-    from functools import partial
     from pathlib import Path
-    import matplotlib.ticker as plticker
-    from matplotlib.backends.backend_pdf import PdfPages
     from st_generated_axial_rot.common import plot_utils
     from st_generated_axial_rot.common.database import create_db, BiplaneViconSubject, pre_fetch
-    from st_generated_axial_rot.common.analysis_utils import prepare_db, st_induced_axial_rot_ang_vel
+    from st_generated_axial_rot.common.analysis_utils import prepare_db, add_st_induced, st_induced_axial_rot_fha
     from st_generated_axial_rot.common.json_utils import get_params
     from st_generated_axial_rot.common.arg_parser import mod_arg_parser
-    import logging
     from logging.config import fileConfig
 
     config_dir = Path(mod_arg_parser('Overview of elevations trials', __package__, __file__))
@@ -244,16 +253,19 @@ if __name__ == '__main__':
 
     # relevant parameters
     output_path = Path(params.output_dir)
-    use_ac = bool(distutils.util.strtobool(params.use_ac))
 
     # logging
     fileConfig(config_dir / 'logging.ini', disable_existing_loggers=False)
     log = logging.getLogger(params.logger_name)
 
-    db_elev = db.loc[db['Trial_Name'].str.contains('_CA_|_SA_|_FE_')].copy()
-    prepare_db(db_elev, params.torso_def, use_ac, params.dtheta_fine, params.dtheta_coarse,
+    if bool(distutils.util.strtobool(params.weighted)):
+        db_elev = db.loc[db['Trial_Name'].str.contains('_WCA_|_WSA_|_WFE_')].copy()
+    else:
+        db_elev = db.loc[db['Trial_Name'].str.contains('_CA_|_SA_|_FE_')].copy()
+
+    prepare_db(db_elev, params.torso_def, params.scap_lateral, params.dtheta_fine, params.dtheta_coarse,
                [params.min_elev, params.max_elev])
-    db_elev['traj_interp'].apply(st_induced_axial_rot_ang_vel)
+    db_elev['traj_interp'].apply(add_st_induced, args=[st_induced_axial_rot_fha])
 
     sections = [('ht_ea_up', 'up', 'common_ht_range_coarse', 'common_coarse_up', 'up'),
                 ('ht_ea_down', 'down', 'common_ht_range_coarse', 'common_coarse_down', 'down')]
@@ -264,7 +276,7 @@ if __name__ == '__main__':
     for activity, activity_df in db_elev.groupby('Activity', observed=True):
         # plot up and down separately
         for section in sections:
-            pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_ac' if use_ac else '_gc') + '_' +
+            pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_' + params.scap_lateral) + '_' +
                                            section[4] + '.pdf')
             with PdfPages(pdf_file_path) as activity_pdf:
                 for name, plot_dir in plot_directives.items():
@@ -284,25 +296,26 @@ if __name__ == '__main__':
                     fig.tight_layout()
                     fig.subplots_adjust(bottom=0.2)
                     fig.suptitle(plot_dir.title)
-                    fig.legend(ncol=10, handlelength=0.75, handletextpad=0.25, columnspacing=0.5, loc='lower left')
+                    fig.legend(ncol=10, handlelength=0.75, handletextpad=0.25, columnspacing=0.5, loc='lower left',
+                               fontsize=8)
                     activity_pdf.savefig(fig)
                     fig.clf()
                     plt.close(fig)
 
             # plot by gender
-            pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_ac' if use_ac else '_gc') + '_' +
+            pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_' + params.scap_lateral) + '_' +
                                            section[4] + '_gender.pdf')
             gender_c = {'F': ['lightcoral', 'red', 'darkorange'], 'M': ['dodgerblue', 'blue', 'navy']}
-            grp_plotter('Gender', pdf_file_path, gender_c, plot_directives)
+            grp_plotter(activity_df, 'Gender', pdf_file_path, gender_c, plot_directives, section)
 
             # plot by age
-            pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_ac' if use_ac else '_gc') + '_' +
+            pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_' + params.scap_lateral) + '_' +
                                            section[4] + '_age.pdf')
             age_c = {'>45': ['lightcoral', 'red', 'darkorange'], '<35': ['dodgerblue', 'blue', 'navy']}
-            grp_plotter('age_group', pdf_file_path, age_c, plot_directives)
+            grp_plotter(activity_df, 'age_group', pdf_file_path, age_c, plot_directives, section)
 
         # plot up down difference
-        pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_ac' if use_ac else '_gc') + '_diff.pdf')
+        pdf_file_path = output_path / (activity + '_' + params.torso_def + ('_' + params.scap_lateral) + '_diff.pdf')
         with PdfPages(pdf_file_path) as diff_pdf:
             for name, plot_dir in plot_directives.items():
                 fig = plt.figure()
@@ -317,7 +330,8 @@ if __name__ == '__main__':
                 fig.tight_layout()
                 fig.subplots_adjust(bottom=0.2)
                 fig.suptitle(plot_dir.title)
-                fig.legend(ncol=10, handlelength=0.75, handletextpad=0.25, columnspacing=0.5, loc='lower left')
+                fig.legend(ncol=10, handlelength=0.75, handletextpad=0.25, columnspacing=0.5, loc='lower left',
+                           fontsize=8)
                 diff_pdf.savefig(fig)
                 fig.clf()
                 plt.close(fig)

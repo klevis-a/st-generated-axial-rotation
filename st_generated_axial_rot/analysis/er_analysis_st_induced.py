@@ -6,7 +6,15 @@ following keys must be present:
 logger_name: Name of the loggger set up in logging.ini that will receive log messages from this script.
 biplane_vicon_db_dir: Path to the directory containing the biplane and vicon CSV files.
 excluded_trials: Trial names to exclude from analysis.
-use_ac: Whether to use the AC or GC landmark when building the scapula CS.
+torso_def: Anatomical definition of the torso: v3d for Visual3D definition, isb for ISB definition.
+scap_lateral: Landmarks to utilize when defining the scapula's lateral (+Z) axis.
+dtheta_fine: Incremental angle (deg) to use for fine interpolation between minimum and maximum HT elevation analyzed.
+era90_endpts: Path to csv file containing start and stop frames (including both external and internal rotation) for
+external rotation in 90 deg of abduction trials.
+erar_endpts: Path to csv file containing start and stop frames (including both external and internal rotation) for
+external rotation in adduction trials.
+backend: Matplotlib backend to use for plotting (e.g. Qt5Agg, macosx, etc.).
+parametric: Whether to use a parametric (true) or non-parametric statistical test (false).
 """
 
 if __name__ == '__main__':
@@ -46,14 +54,14 @@ if __name__ == '__main__':
 
     # relevant parameters
     output_path = Path(params.output_dir)
-    use_ac = bool(distutils.util.strtobool(params.use_ac))
 
     # logging
     fileConfig(config_dir / 'logging.ini', disable_existing_loggers=False)
     log = logging.getLogger(params.logger_name)
 
     # ready db
-    db_er_endpts = ready_er_db(db, params.torso_def, use_ac, params.erar_endpts, params.era90_endpts, params.dtheta_fine)
+    db_er_endpts = ready_er_db(db, params.torso_def, params.scap_lateral, params.erar_endpts, params.era90_endpts,
+                               params.dtheta_fine)
 
 #%%
     if bool(distutils.util.strtobool(params.parametric)):
@@ -69,7 +77,7 @@ if __name__ == '__main__':
     markers = ['^', 'o',  's', '*']
     plot_utils.init_graphing(params.backend)
     plt.close('all')
-    fig = plt.figure(figsize=(190 / 25.4, 190 / 25.4), dpi=params.dpi)
+    fig = plt.figure(figsize=(190 / 25.4, 190 / 25.4))
     axs = fig.subplots(2, 2)
 
     for row_idx, row in enumerate(axs):
@@ -91,7 +99,7 @@ if __name__ == '__main__':
         all_traj_tilt = np.stack(activity_df['st_induced_tilt'], axis=0)
         all_traj_total = np.stack(activity_df['st_induced_total'], axis=0)
 
-        all_traj_ht = np.stack(activity_df['ht_true'], axis=0)
+        all_traj_ht = np.stack(activity_df['ht_true_axial'], axis=0)
         max_idx = np.argmax(np.abs(all_traj_ht), axis=1)
         st_percent = (all_traj_total[np.arange(max_idx.size), max_idx] /
                       all_traj_ht[np.arange(max_idx.size), max_idx]) * 100
@@ -223,7 +231,4 @@ if __name__ == '__main__':
 
     make_interactive()
 
-    if params.fig_file:
-        fig.savefig(params.fig_file)
-    else:
-        plt.show()
+    plt.show()

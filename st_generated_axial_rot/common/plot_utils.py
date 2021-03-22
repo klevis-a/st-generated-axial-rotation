@@ -88,6 +88,13 @@ def mean_sd_plot(ax: matplotlib.axes.Axes, x: np.ndarray, mean: np.ndarray, sd: 
     return ax.plot(x, mean, **line_kwargs)
 
 
+def quantile_plot(ax: matplotlib.axes.Axes, x: np.ndarray, median: np.ndarray, lower: np.ndarray, upper: np.ndarray,
+                  shaded_kwargs: Dict[str, Any], line_kwargs: Dict[str, Any]) -> List[matplotlib.lines.Line2D]:
+    """Create mean +- sd plot."""
+    ax.fill_between(x, lower, upper, **shaded_kwargs)
+    return ax.plot(x, median, **line_kwargs)
+
+
 def spm_plot(ax: matplotlib.axes.Axes, x: np.ndarray, spm_test: _SPM0Dinference, shaded_kwargs: Dict[str, Any],
              line_kwargs: Dict[str, Any]) -> List[matplotlib.lines.Line2D]:
     """Create SPM plot."""
@@ -149,8 +156,8 @@ def style_axes_add_right(ax: matplotlib.axes.Axes, y_label: Union[str, None]):
         update_ylabel(ax, y_label, font_size=10)
 
 
-def extract_sig(spm_test: _SPM0Dinference, x: np.ndarray) -> str:
-    sig = np.logical_or(spm_test.z < -spm_test.zstar, spm_test.z > spm_test.zstar)
+def sig_string(x: np.ndarray, sig: np.ndarray) -> str:
+    """Create a string describing signifiance based on the domain x and boolean vector of signifiance (sig)."""
     run_values, run_starts, run_lengths = find_runs(sig)
     run_starts_sign = run_starts[run_values]
     run_lengths_sign = run_lengths[run_values]
@@ -158,6 +165,88 @@ def extract_sig(spm_test: _SPM0Dinference, x: np.ndarray) -> str:
     for run, length in zip(run_starts_sign, run_lengths_sign):
         sec.append('{:.2f} - {:.2f}'.format(x[run], x[run + length - 1]))
     return '\n'.join(sec)
+
+
+def extract_sig(spm_test: _SPM0Dinference, x: np.ndarray) -> str:
+    """Create a string describing where spm_test is significant in the domain of x."""
+    sig = np.logical_or(spm_test.z < -spm_test.zstar, spm_test.z > spm_test.zstar)
+    return sig_string(x, sig)
+
+
+def extract_non_sig(spm_test: _SPM0Dinference, x: np.ndarray) -> str:
+    """Create a string describing where spm_test is NOT significant in the domain of x."""
+    non_sig = np.logical_and(spm_test.z > -spm_test.zstar, spm_test.z < spm_test.zstar)
+    return sig_string(x, non_sig)
+
+
+def extract_sig_gt(spm_test: _SPM0Dinference, x: np.ndarray) -> str:
+    """Create a string describing where spm_test is significant in the domain of x but only when z > z*."""
+    sig = spm_test.z > spm_test.zstar
+    return sig_string(x, sig)
+
+
+def extract_sig_lt(spm_test: _SPM0Dinference, x: np.ndarray) -> str:
+    """Create a string describing where spm_test is significant in the domain of x but only when z < -z*."""
+    sig = spm_test.z < -spm_test.zstar
+    return sig_string(x, sig)
+
+
+def sig_filter(spm_test: _SPM0Dinference, x: np.ndarray) -> np.ndarray:
+    """Return a vector which has NaNs everywhere apart where spm_test is significant in the domain of x."""
+    x_ret = np.copy(x)
+    x_ret[np.logical_and(spm_test.z > -spm_test.zstar, spm_test.z < spm_test.zstar)] = np.nan
+    return x_ret
+
+
+def non_sig_filter(spm_test: _SPM0Dinference, x: np.ndarray) -> np.ndarray:
+    """Return a vector which has NaNs where spm_test is significant in the domain of x."""
+    x_ret = np.copy(x)
+    x_ret[np.logical_or(spm_test.z < -spm_test.zstar, spm_test.z > spm_test.zstar)] = np.nan
+    return x_ret
+
+
+def sig_filter_gt(spm_test: _SPM0Dinference, x: np.ndarray) -> np.ndarray:
+    """Return a vector which has NaNs everywhere apart where spm_test is significant in the domain of x and z > z*."""
+    x_ret = np.copy(x)
+    x_ret[spm_test.z < spm_test.zstar] = np.nan
+    return x_ret
+
+
+def sig_filter_lt(spm_test: _SPM0Dinference, x: np.ndarray) -> np.ndarray:
+    """Return a vector which has NaNs everywhere apart where spm_test is significant in the domain of x and z < -z*."""
+    x_ret = np.copy(x)
+    x_ret[spm_test.z > -spm_test.zstar] = np.nan
+    return x_ret
+
+
+def output_spm_p(spm_test: _SPM0Dinference):
+    """Output SPM cluster p-values."""
+    ret_str = ''
+    for idx, cluster in enumerate(spm_test.clusters):
+        ret_str += 'Cluster {}: {:.5f}, {:.5f} '.format(idx + 1, cluster.P, cluster.threshold)
+    if hasattr(spm_test, 'p_set'):
+        ret_str += '\nSet-Level: {:.5f}'.format(spm_test.p_set)
+    return ret_str
+
+
+def retrieve_bp_stats(bp: Dict[str, List]) -> Tuple[float, float, float, float, float]:
+    """Return min, 25%, median, 75%, and max given a boxplot."""
+    def get_bp_limits(bp):
+        min_max = np.zeros((len(bp['fliers']), 3))
+        for idx, (flier, lWhisker, uWhisker) in enumerate(
+                zip(bp['fliers'], bp['whiskers'][0::2], bp['whiskers'][1::2])):
+            x_data = np.append(flier.get_xdata(), np.append(lWhisker.get_xdata(), uWhisker.get_xdata()))
+            unique_x = np.unique(x_data.round(decimals=4))
+            assert (len(unique_x) == 1)
+            y_data = np.append(flier.get_ydata(), np.append(lWhisker.get_ydata(), uWhisker.get_ydata()))
+            min_max[idx, 0] = unique_x
+            min_max[idx, 1] = min(y_data)
+            min_max[idx, 2] = max(y_data)
+        return min_max
+
+    bp_lims = get_bp_limits(bp)
+    return (bp_lims[0, 1], bp['boxes'][0].get_ydata()[0], bp['medians'][0].get_ydata()[0],
+            bp['boxes'][0].get_ydata()[2], bp_lims[0, 2])
 
 
 # from https://stackoverflow.com/a/31548752/2577053
