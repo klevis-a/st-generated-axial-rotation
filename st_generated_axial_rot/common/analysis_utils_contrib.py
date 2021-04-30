@@ -1,6 +1,6 @@
 import numpy as np
-from biokinepy.trajectory import PoseTrajectory
 from scipy.integrate import cumtrapz
+from biokinepy.trajectory import PoseTrajectory
 from biokinepy.vec_ops import extended_dot
 from biokinepy.vel_acc import ang_vel
 from st_generated_axial_rot.common.analysis_utils import generic_add_interp
@@ -135,3 +135,24 @@ def add_st_gh_contrib_ind(ht_joint: PoseTrajectory, st_joint: PoseTrajectory, gh
     gh_contribs[:, 3] = cumtrapz(gh_ang_vel_mag, dx=gh_joint.dt, initial=0)
 
     return ht_contribs, st_contribs, gh_contribs
+
+
+def compute_yxy_from_euler_rates(ht_gh_joint: PoseTrajectory):
+    ht_euler = ht_gh_joint.euler.yxy_intrinsic
+    num_frames = ht_euler.shape[0]
+
+    ht_euler_base_c1 = np.stack((np.repeat(0, num_frames), np.repeat(1, num_frames), np.repeat(0, num_frames)), -1)
+    ht_euler_base_c2 = np.stack((np.cos(ht_euler[:, 0]), np.repeat(0, num_frames), -np.sin(ht_euler[:, 0])), -1)
+    ht_euler_base_c3 = np.stack((np.sin(ht_euler[:, 0]) * np.sin(ht_euler[:, 1]), np.cos(ht_euler[:, 1]),
+                                 np.cos(ht_euler[:, 0]) * np.sin(ht_euler[:, 1])), -1)
+
+    ht_euler_base = np.stack((ht_euler_base_c1, ht_euler_base_c2, ht_euler_base_c3), -1)
+
+    ht_euler_base_inv = np.linalg.inv(ht_euler_base)
+    ht_euler_rates = np.squeeze(ht_euler_base_inv @ ht_gh_joint.ang_vel[..., np.newaxis])
+    ht_poe_changes = cumtrapz(ht_euler_rates[:, 0], dx=ht_gh_joint.dt, initial=0)
+    ht_elev_changes = cumtrapz(ht_euler_rates[:, 1], dx=ht_gh_joint.dt, initial=0)
+    ht_axial_changes = cumtrapz(ht_euler_rates[:, 0] * np.cos(ht_euler[:, 1]) + ht_euler_rates[:, 2],
+                                dx=ht_gh_joint.dt, initial=0)
+
+    return np.stack((ht_poe_changes, ht_elev_changes, ht_axial_changes), 1)
