@@ -171,7 +171,7 @@ if __name__ == '__main__':
     plt.tight_layout(pad=0.25, h_pad=1.5, w_pad=0.5)
     fig.suptitle('SHR Comparison', x=0.47, y=0.99, fontweight='bold')
     plt.subplots_adjust(top=0.93)
-    leg_left = fig.legend(leg_mean[:2], ['Euler SHR', 'Contribution SHR'], loc='upper right', bbox_to_anchor=(1, 0.92),
+    leg_left = fig.legend(leg_mean[:2], ['Euler SHR', 'Coordinated SHR'], loc='upper right', bbox_to_anchor=(1, 0.92),
                           ncol=1, handlelength=1.5, handletextpad=0.5, columnspacing=0.75, labelspacing=0.3,
                           borderpad=0.2)
 

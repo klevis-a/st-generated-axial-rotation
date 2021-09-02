@@ -246,15 +246,15 @@ if __name__ == '__main__':
         print(output_spm_p(st_vs_ht))
 
     # add stats test text
-    axs_elev[0].text(25, 10, 'GH = HT', ha='left', fontsize=10, fontweight='bold')
-    axs_elev[0].text(107, 10, 'ST = HT', ha='left', fontsize=10, fontweight='bold')
+    axs_elev[0].text(25, 10, 'GH ~ HT', ha='left', fontsize=10, fontweight='bold')
+    axs_elev[0].text(107, 10, 'ST ~ HT', ha='left', fontsize=10, fontweight='bold')
     axs_elev[0].set_ylim(None, 15)
 
-    axs_elev[1].text(25, 14, 'GH = HT', ha='left', fontsize=10, fontweight='bold')
-    axs_elev[1].text(95, 14, 'ST = HT', ha='left', fontsize=10, fontweight='bold')
+    axs_elev[1].text(25, 14, 'GH ~ HT', ha='left', fontsize=10, fontweight='bold')
+    axs_elev[1].text(95, 14, 'ST ~ HT', ha='left', fontsize=10, fontweight='bold')
     axs_elev[1].set_ylim(None, 18)
 
-    axs_elev[2].text(70, 31, 'ST = HT', ha='left', fontsize=10, fontweight='bold')
+    axs_elev[2].text(70, 31, 'ST ~ HT', ha='left', fontsize=10, fontweight='bold')
     axs_elev[2].set_ylim(None, 35)
 
     axs_er[0].text(37, 7, 'ST < 10%', ha='left', fontsize=10, fontweight='bold')

@@ -1,4 +1,4 @@
-"""Correlation of ST-generated Axial Rotation with Euler/Cardan angles
+"""Correlation of ST-generated Axial Rotation with GH PoE
 
 The path to a config directory (containing parameters.json) must be passed in as an argument. Within parameters.json the
 following keys must be present:
@@ -11,10 +11,6 @@ dtheta_fine: Incremental angle (deg) to use for fine interpolation between minim
 dtheta_coarse: Incremental angle (deg) to use for coarse interpolation between minimum and maximum HT elevation analyzed.
 min_elev: Minimum HT elevation angle (deg) utilized for analysis that encompasses all trials.
 max_elev: Maximum HT elevation angle (deg) utilized for analysis that encompasses all trials.
-era90_endpts: Path to csv file containing start and stop frames (including both external and internal rotation) for
-external rotation in 90 deg of abduction trials.
-erar_endpts: Path to csv file containing start and stop frames (including both external and internal rotation) for
-external rotation in adduction trials.
 backend: Matplotlib backend to use for plotting (e.g. Qt5Agg, macosx, etc.).
 dpi: Dots (pixels) per inch for generated figure. (e.g. 300)
 fig_file: Path to file where to save figure.
@@ -31,7 +27,6 @@ if __name__ == '__main__':
     from scipy.stats import linregress
     import numpy as np
     import matplotlib.pyplot as plt
-    from st_generated_axial_rot.common.analysis_er_utils import ready_er_db
     from st_generated_axial_rot.common.analysis_utils_contrib import add_st_gh_contrib
     from st_generated_axial_rot.common.plot_utils import (init_graphing, make_interactive, mean_sd_plot, style_axes)
     from st_generated_axial_rot.common.database import create_db, BiplaneViconSubject, pre_fetch
@@ -65,8 +60,6 @@ if __name__ == '__main__':
     prepare_db(db_elev, params.torso_def, params.scap_lateral, params.dtheta_fine, params.dtheta_coarse,
                [params.min_elev, params.max_elev])
     db_elev['traj_interp'].apply(add_st_gh_contrib)
-    db_er_endpts = ready_er_db(db, params.torso_def, params.scap_lateral, params.erar_endpts, params.era90_endpts,
-                               params.dtheta_fine)
 
     #%%
     color_map = plt.get_cmap('Dark2')
@@ -78,9 +71,8 @@ if __name__ == '__main__':
     init_graphing(params.backend)
     plt.close('all')
 
-    fig = plt.figure(figsize=(190 / 25.4, 190 / 25.4), dpi=params.dpi)
-    gs = fig.add_gridspec(2, 6)
-    axs_elev = [fig.add_subplot(gs[0, :2]), fig.add_subplot(gs[0, 2:4]), fig.add_subplot(gs[0, 4:6])]
+    fig = plt.figure(figsize=(190 / 25.4, 100 / 25.4), dpi=params.dpi)
+    axs_elev = fig.subplots(1, 3)
 
     y_labels = ['GH PoE (deg)', 'ST-contributed Axial Rotation (deg)', 'ST-contributed Axial Rotation (deg)']
     for i in range(3):
@@ -198,78 +190,16 @@ if __name__ == '__main__':
         axs_elev[i].set_xticklabels(tick_labels)
 
     # labels for elevation trials
-    axs_elev[1].text(0.5, 1.03, 'Elevation Trials', ha='center', fontsize=12, fontweight='bold',
-                     transform=axs_elev[1].transAxes)
     leg_left = fig.legend([leg_mean[i] for i in [0, 2, 1]], ['CA', 'SA', 'FE'], loc='upper left',
-                          bbox_to_anchor=(0.05, 0.97), ncol=3, handlelength=1.5, handletextpad=0.5, columnspacing=0.75,
+                          bbox_to_anchor=(0, 1.01), ncol=3, handlelength=1.5, handletextpad=0.5, columnspacing=0.75,
                           labelspacing=0.3, borderpad=0.2)
     axs_elev[0].set_title('GH PoE', y=0.925)
-    axs_elev[1].set_title('ST Axial Rotation', y=0.925)
-    axs_elev[2].set_title('ST Axial Rotation\nvs GH PoE', y=0.9)
-
-    # ERaR
-    ax_erar = fig.add_subplot(gs[1, :3])
-    style_axes(ax_erar, 'Change in ST Re/Protraction (Euler) (Deg)', 'ST-contributed Axial Rotation (deg)')
-    db_erar = db_er_endpts.loc[db['Trial_Name'].str.contains('_ERaR_')].copy()
-    traj_st_axial = np.stack(db_erar['st_contribs_interp'], axis=0)[:, :, 2]
-    st_repro = np.stack(db_erar['st_protraction_isb'], axis=0)
-    erar_st_contrib_total = np.rad2deg(traj_st_axial[:, -1])
-    st_repro_diff = np.rad2deg(st_repro[:, -1] - st_repro[:, 0])
-    ax_erar.scatter(st_repro_diff, erar_st_contrib_total, color=color_map.colors[3])
-    slope, intercept, r_value, p_value, _ = linregress(st_repro_diff, erar_st_contrib_total)
-    xmin = np.min(st_repro_diff)
-    xmax = np.max(st_repro_diff)
-    xrange = np.arange(xmin, xmax + 0.1, 0.1)
-    ax_erar.plot(xrange, slope * xrange + intercept, '--', c=color_map.colors[3], lw=2)
-    ax_erar.text(-5, 1, 'R={:.2f}'.format(r_value), color=color_map.colors[3], fontweight='bold')
-    ax_erar.set_title('ST Axial Rotation vs ST Re/Protraction', y=0.95)
-    ax_erar.text(0.5, 1.05, 'External Rotation in Adduction', ha='center', fontsize=12, fontweight='bold',
-                 transform=ax_erar.transAxes)
-    ax_erar.set_ylim(-30, 5)
-    print('ERaR')
-    print('ST Re/Protraction Max Mean: {:.2f}'.format(np.mean(st_repro_diff)))
-    print('ST Re/Protraction Max Min {:.2f}:'.format(np.min(st_repro_diff)))
-    print('ST Re/Protraction Max Min {:.2f}:'.format(np.max(st_repro_diff)))
-    print('ST-Generated Mean at Max: {:.2f}'.format(np.mean(erar_st_contrib_total)))
-    print('ST_Generated Min at Max {:.2f}:'.format(np.min(erar_st_contrib_total)))
-    print('ST_Generated Max at Max {:.2f}:'.format(np.max(erar_st_contrib_total)))
-    print('r-value: {:.2f}'.format(r_value))
-    print('p-value: {:.5f}'.format(p_value))
-    print('Slope: {:.5f}'.format(slope))
-
-    # ERa90
-    ax_era90 = fig.add_subplot(gs[1, 3:])
-    style_axes(ax_era90, 'Change in ST Upward Rotation (Euler) (Deg)', 'ST-contributed Axial Rotation (deg)')
-    db_era90 = db_er_endpts.loc[db['Trial_Name'].str.contains('_ERa90_')].copy()
-    traj_st_axial = np.stack(db_era90['st_contribs_interp'], axis=0)[:, :, 2]
-    st_upward = np.stack(db_era90['st_latmed_isb'], axis=0)
-    era90_st_contrib_total = np.rad2deg(traj_st_axial[:, -1])
-    st_latmed_diff = np.rad2deg(st_upward[:, -1] - st_upward[:, 0])
-    ax_era90.scatter(st_latmed_diff, era90_st_contrib_total, color=color_map.colors[7])
-    slope, intercept, r_value, p_value, _ = linregress(st_latmed_diff, era90_st_contrib_total)
-    xmin = np.min(st_latmed_diff)
-    xmax = np.max(st_latmed_diff)
-    xrange = np.arange(xmin, xmax + 0.1, 0.1)
-    ax_era90.plot(xrange, slope * xrange + intercept, '--', c=color_map.colors[7], lw=2)
-    ax_era90.text(-12, -5, 'R={:.2f}'.format(r_value), color=color_map.colors[7], fontweight='bold')
-    ax_era90.set_title('ST Axial Rotation vs ST Upward Rotation', y=0.95)
-    ax_era90.text(0.5, 1.05, r'External Rotation in 90° of Abduction', ha='center', fontsize=12, fontweight='bold',
-                  transform=ax_era90.transAxes)
-    ax_era90.set_ylim(-35, 0)
-    print('ERa90')
-    print('ST Upward Rotation Max Mean: {:.2f}'.format(np.mean(st_latmed_diff)))
-    print('ST Upward Rotation Max Min {:.2f}:'.format(np.min(st_latmed_diff)))
-    print('ST Upward Rotation Max Min {:.2f}:'.format(np.max(st_latmed_diff)))
-    print('ST-Generated Mean at Max: {:.2f}'.format(np.mean(era90_st_contrib_total)))
-    print('ST_Generated Min at Max {:.2f}:'.format(np.min(era90_st_contrib_total)))
-    print('ST_Generated Max at Max {:.2f}:'.format(np.max(era90_st_contrib_total)))
-    print('r-value: {:.2f}'.format(r_value))
-    print('p-value: {:.5f}'.format(p_value))
-    print('Slope: {:.5f}'.format(slope))
+    axs_elev[1].set_title('ST-contributed\nAxial Rotation', y=0.88)
+    axs_elev[2].set_title('ST-contributed\nAxial Rotation\nvs GH PoE', y=0.86)
 
     # figure title and legend
     plt.tight_layout(pad=0.25, h_pad=1.5, w_pad=0)
-    fig.suptitle('ST-contributed Axial Rotation Correlations', x=0.5, y=0.99,
+    fig.suptitle('ST-contributed Axial Rotation versus GH PoE', x=0.5, y=0.99,
                  fontweight='bold')
     plt.subplots_adjust(top=0.93)
 

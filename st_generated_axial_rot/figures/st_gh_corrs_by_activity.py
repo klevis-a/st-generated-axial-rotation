@@ -137,7 +137,7 @@ if __name__ == '__main__':
 
     # figure title and legend
     plt.tight_layout(pad=0.25, h_pad=1.5, w_pad=0.5)
-    fig.suptitle('Correlation of ST-generated Axial Rotation between Activities', x=0.5, y=0.99, fontweight='bold')
+    fig.suptitle('Correlation of ST-contributed Axial Rotation between Activities', x=0.5, y=0.99, fontweight='bold')
     plt.subplots_adjust(top=0.93)
 
     # add axes titles

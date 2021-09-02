@@ -145,7 +145,7 @@ if __name__ == '__main__':
 
     # figure title and legend
     plt.tight_layout(pad=0.25, h_pad=1.5, w_pad=0.5)
-    fig.suptitle('Correlation between ST-generated and GH Axial Rotation', x=0.5, y=0.99, fontweight='bold')
+    fig.suptitle('Correlation between ST-contributed and GH Axial Rotation', x=0.5, y=0.99, fontweight='bold')
     plt.subplots_adjust(top=0.93)
 
     # add axes titles

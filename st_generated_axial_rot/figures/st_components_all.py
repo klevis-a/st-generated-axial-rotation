@@ -314,7 +314,7 @@ if __name__ == '__main__':
     # figure title and legend
     plt.figure(fig.number)
     plt.tight_layout(pad=0.25, h_pad=1.5, w_pad=0.5)
-    fig.suptitle('Components of ST-generated Axial Rotation', x=0.53, y=0.99, fontweight='bold')
+    fig.suptitle('Components of ST-contributed Axial Rotation', x=0.53, y=0.99, fontweight='bold')
     plt.subplots_adjust(top=0.92)
     leg_left = fig.legend(leg_elev_mean, ['Total', 'Upward Rot', 'RePro', 'Tilt'], loc='upper left',
                           bbox_to_anchor=(0, 1), ncol=2, handlelength=1.5, handletextpad=0.5,
